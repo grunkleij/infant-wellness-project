@@ -1,9 +1,10 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 import pandas as pd
 import numpy as np
 import tensorflow as tf
 import pickle
 from .forms import BabyDataForm
+from .models import WellnessPrediction # NEW: Import the model
 import os
 from datetime import datetime
 
@@ -36,15 +37,12 @@ def predict_wellness(request):
 
         if form.is_valid():
             if error_message:
-                pass 
+                pass
             else:
                 try:
                     data = form.cleaned_data
                     input_df = pd.DataFrame([data])
-                    
-                    # --- FIX: Add missing dummy columns the preprocessor expects ---
-                    # The preprocessor was likely trained with a 'date' column, which we don't use.
-                    # We add it here to prevent an error.
+
                     input_df['date'] = datetime.now().strftime("%Y-%m-%d")
 
                     # Feature Engineering
@@ -52,7 +50,7 @@ def predict_wellness(request):
                         input_df['weight_gain_per_day'] = (input_df['weight_kg'] - input_df['birth_weight_kg']) / input_df['age_days']
                         input_df.replace([np.inf, -np.inf], 0, inplace=True)
                         input_df.fillna({'weight_gain_per_day': 0}, inplace=True)
-                    
+
                     # Preprocess, Predict, and Decode
                     processed_input = preprocessor.transform(input_df).toarray()
                     pred_proba_array = model.predict(processed_input)[0]
@@ -60,6 +58,22 @@ def predict_wellness(request):
                     prediction = label_encoder.inverse_transform([pred_index])[0]
                     prediction_proba = f"{pred_proba_array[pred_index] * 100:.2f}%"
                     print(f"--- ✅ PREDICTION SUCCESS: '{prediction}' with {prediction_proba} confidence. ---")
+
+                    # --- NEW: Save the valid form data and prediction to the database ---
+                    try:
+                        # Convert probability string '98.75%' to float 98.75 for saving
+                        proba_float = float(prediction_proba.strip('%'))
+                        
+                        # Create the record in the database
+                        WellnessPrediction.objects.create(
+                            **data,
+                            prediction=prediction,
+                            prediction_proba=proba_float
+                        )
+                        print("--- ✅ Prediction saved to database. ---")
+                    except Exception as e:
+                        print(f"--- ❌ ERROR saving to database: {e} ---")
+                        # You might want to handle this error, but for now, we'll just print it
 
                 except Exception as e:
                     print(f"--- ❌ ERROR during prediction logic: {e} ---")
@@ -74,3 +88,28 @@ def predict_wellness(request):
         'error': error_message,
     }
     return render(request, 'predictor/home.html', context)
+
+def prediction_history(request):
+    # Fetch all prediction records from the database, ordering by the newest first
+    predictions = WellnessPrediction.objects.all().order_by('-created_at')
+    
+    context = {
+        'predictions': predictions,
+    }
+    return render(request, 'predictor/history.html', context)
+
+def delete_prediction(request, record_id):
+    # We only want to allow deletion via POST request for security
+    if request.method == 'POST':
+        try:
+            # Find the prediction record by its ID and delete it
+            record = WellnessPrediction.objects.get(id=record_id)
+            record.delete()
+        except WellnessPrediction.DoesNotExist:
+            # Handle the case where the record doesn't exist
+            pass
+    
+    # Redirect back to the history page regardless of the method or outcome
+    return redirect('history')
+
+
