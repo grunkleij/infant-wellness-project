@@ -1,13 +1,6 @@
 ## code for the model training
 ````
 ```
-#
-# -----------------
-# 🚨 IMPORTANT 🚨
-# This script is for generating the final model files for your Django application.
-# It trains on the ENTIRE dataset to create the most accurate model.
-# -----------------
-#
 
 import pandas as pd
 import numpy as np
@@ -19,20 +12,17 @@ import os
 
 print("--- Script started. ---")
 
-# --- 1. CONFIGURE YOUR DATASET ---
+
 csv_file_name = 'newborn_health_monitoring_with_risk.csv'
 
-# --- 2. DEFINE OUTPUT FOLDER AND FILENAMES ---
 OUTPUT_DIR = 'saved_model_assets'
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
-# Using the filenames your Django app expects
 MODEL_PATH = os.path.join(OUTPUT_DIR, 'infant_health_risk_model.keras')
 PREPROCESSOR_PATH = os.path.join(OUTPUT_DIR, 'preprocessor.pkl')
 ENCODER_PATH = os.path.join(OUTPUT_DIR, 'label_encoder.pkl')
 
-# --- 3. LOAD AND PREPARE DATA ---
 try:
     df = pd.read_csv(csv_file_name)
     print(f"--- Successfully loaded '{csv_file_name}' ---")
@@ -40,7 +30,6 @@ except FileNotFoundError:
     print(f"--- ❌ ERROR: The file '{csv_file_name}' was not found. Please make sure it's in the same directory as this script. ---")
     exit()
 
-# Perform the same preprocessing as your training script
 df_processed = df.drop(['baby_id', 'name'], axis=1, errors='ignore')
 if 'weight_kg' in df_processed.columns and 'birth_weight_kg' in df_processed.columns and 'age_days' in df_processed.columns:
     df_processed['weight_gain_per_day'] = (df_processed['weight_kg'] - df_processed['birth_weight_kg']) / df_processed['age_days']
@@ -54,14 +43,11 @@ for col in df_processed.select_dtypes(include=np.number).columns:
 X = df_processed.drop('risk_level', axis=1)
 y = df_processed['risk_level']
 
-# --- 4. CREATE, FIT, AND SAVE THE PREPROCESSORS ---
 print("--- Creating and fitting preprocessors on the full dataset... ---")
 
-# Identify feature types
 numerical_features = X.select_dtypes(include=np.number).columns.tolist()
 categorical_features = X.select_dtypes(exclude=np.number).columns.tolist()
 
-# Create the preprocessor and label encoder
 preprocessor = ColumnTransformer(
     transformers=[
         ('num', StandardScaler(), numerical_features),
@@ -69,11 +55,9 @@ preprocessor = ColumnTransformer(
     ])
 label_encoder = LabelEncoder()
 
-# Fit them on the ENTIRE dataset to learn all possible values
 preprocessor.fit(X)
 label_encoder.fit(y)
 
-# Save the fitted objects using pickle
 with open(PREPROCESSOR_PATH, 'wb') as f:
     pickle.dump(preprocessor, f)
 print(f"--- ✅ Preprocessor saved to '{PREPROCESSOR_PATH}' ---")
@@ -82,15 +66,12 @@ with open(ENCODER_PATH, 'wb') as f:
     pickle.dump(label_encoder, f)
 print(f"--- ✅ Label Encoder saved to '{ENCODER_PATH}' ---")
 
-# --- 5. TRAIN AND SAVE THE FINAL MODEL ---
 print("\n--- Training final model on the full dataset... ---")
 
-# Transform the data using the newly fitted preprocessors
 X_processed = preprocessor.transform(X).toarray()
 y_encoded = label_encoder.transform(y)
 y_categorical = tf.keras.utils.to_categorical(y_encoded)
 
-# Define model architecture (same as your script)
 n_features = X_processed.shape[1]
 n_classes = y_categorical.shape[1]
 model = tf.keras.Sequential([
@@ -101,11 +82,9 @@ model = tf.keras.Sequential([
     tf.keras.layers.Dense(n_classes, activation='softmax')
 ])
 
-# Compile and train
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 model.fit(X_processed, y_categorical, epochs=50, batch_size=32, verbose=1)
 
-# Save the final, trained model
 model.save(MODEL_PATH)
 print(f"--- ✅ Model saved to '{MODEL_PATH}' ---")
 print("\n--- All files generated successfully! You can now move them to your Django project's 'ml_model' folder. ---")
