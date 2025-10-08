@@ -1,6 +1,6 @@
 ## code for the model training
 ````python
-```
+
 
 import pandas as pd
 import numpy as np
@@ -90,7 +90,7 @@ print(f"--- ✅ Model saved to '{MODEL_PATH}' ---")
 print("\n--- All files generated successfully! You can now move them to your Django project's 'ml_model' folder. ---")
 
 
-```
+
 ````
 
 ## Example values for risk
