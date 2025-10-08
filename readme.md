@@ -1,5 +1,5 @@
 ## code for the model training
-````
+````python
 ```
 
 import pandas as pd
